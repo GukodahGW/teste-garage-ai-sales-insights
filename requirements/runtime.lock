@@ -1,0 +1,6 @@
+# Runtime padrao com SQLite. Atualize deliberadamente e valide antes de alterar.
+greenlet==3.5.3
+setuptools==83.0.0
+SQLAlchemy==2.0.51
+typing_extensions==4.16.0
+

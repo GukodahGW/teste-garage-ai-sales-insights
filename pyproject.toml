@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools==83.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "garage-ai-sales-insights"
+version = "0.1.0"
+description = "Camada de consultas plugavel com contratos de dominio e SQLAlchemy"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "SQLAlchemy==2.0.51",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]==3.3.4"]
+mysql = ["PyMySQL==1.2.0"]
+dev = [
+    "mypy==1.20.2",
+    "pytest==8.4.2",
+    "ruff==0.15.22",
+]
+
+[project.scripts]
+garage-sales = "garage_sales.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+garage_sales = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests"]

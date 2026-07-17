@@ -1,0 +1,66 @@
+import argparse
+import json
+from collections.abc import Sequence
+from decimal import Decimal
+
+from sqlalchemy import text
+
+from garage_sales.application import SalesQueries
+from garage_sales.bootstrap import build_persistence
+from garage_sales.domain import SaleCriteria
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="garage-sales")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    subparsers.add_parser("check-db", help="valida a conexao com o banco configurado")
+    subparsers.add_parser("init-db", help="cria o schema para desenvolvimento local")
+
+    sales = subparsers.add_parser("list-sales", help="lista vendas usando os repositorios")
+    sales.add_argument("--customer-id", type=int)
+    sales.add_argument("--min-total", type=Decimal)
+    sales.add_argument("--max-total", type=Decimal)
+    sales.add_argument("--limit", type=int, default=100)
+    sales.add_argument("--offset", type=int, default=0)
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    persistence = build_persistence()
+
+    try:
+        if args.command == "check-db":
+            with persistence.engine.connect() as connection:
+                connection.execute(text("SELECT 1")).scalar_one()
+            print(f"Conexao OK: {persistence.engine.dialect.name}")
+            return 0
+
+        if args.command == "init-db":
+            persistence.create_schema()
+            print(f"Schema criado: {persistence.engine.dialect.name}")
+            return 0
+
+        criteria = SaleCriteria(
+            customer_id=args.customer_id,
+            min_total=args.min_total,
+            max_total=args.max_total,
+            limit=args.limit,
+            offset=args.offset,
+        )
+        sales = SalesQueries(persistence).get_sales_by(criteria)
+        result = [
+            {
+                "id": sale.id,
+                "customer_id": sale.customer_id,
+                "total_amount": str(sale.total_amount),
+                "sold_at": sale.sold_at.isoformat(),
+            }
+            for sale in sales
+        ]
+        print(json.dumps(result, indent=2))
+        return 0
+    finally:
+        persistence.dispose()
+

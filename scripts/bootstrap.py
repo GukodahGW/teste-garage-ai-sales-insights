@@ -1,22 +1,14 @@
-"""Cria a .venv local e instala somente dependencias fixadas no repositorio."""
+"""Sincroniza a .venv local com o pyproject.toml e o uv.lock."""
 
 import argparse
 import shutil
 import subprocess
 import sys
-import venv
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VENV_DIR = ROOT / ".venv"
 BACKUP_VENV_DIR = ROOT / ".venv.previous"
-PIP_VERSION = "26.1.2"
-
-
-def _venv_python() -> Path:
-    if sys.platform == "win32":
-        return VENV_DIR / "Scripts" / "python.exe"
-    return VENV_DIR / "bin" / "python"
 
 
 def _run(command: list[str]) -> None:
@@ -51,7 +43,15 @@ def main() -> int:
         return 2
 
     args = _parse_args()
-    virtual_python = _venv_python()
+    uv_executable = shutil.which("uv")
+    if uv_executable is None:
+        print("uv nao encontrado. Instale-o e deixe o executavel no PATH.", file=sys.stderr)
+        return 2
+
+    if Path(uv_executable).resolve().is_relative_to(VENV_DIR.resolve()):
+        print("Execute o bootstrap usando um uv externo a .venv.", file=sys.stderr)
+        return 2
+
     backup_created = False
 
     if args.recreate and VENV_DIR.exists():
@@ -75,40 +75,18 @@ def main() -> int:
         backup_created = True
 
     try:
-        if not virtual_python.exists():
-            print(f"Criando ambiente virtual em {VENV_DIR}", flush=True)
-            venv.EnvBuilder(with_pip=True).create(VENV_DIR)
-
-        python = str(virtual_python)
-        _run([python, "-m", "pip", "install", "--upgrade", f"pip=={PIP_VERSION}"])
-
-        dependency_file = "dev.lock" if args.dev else "runtime.lock"
-        install_command = [
-            python,
-            "-m",
-            "pip",
-            "install",
-            "--requirement",
-            str(ROOT / "requirements" / dependency_file),
+        sync_command = [
+            uv_executable,
+            "sync",
+            "--locked",
+            "--python",
+            sys.executable,
         ]
+        if args.dev:
+            sync_command.extend(["--extra", "dev"])
         if args.database != "sqlite":
-            install_command.extend(
-                ["--requirement", str(ROOT / "requirements" / f"{args.database}.lock")]
-            )
-        _run(install_command)
-
-        _run(
-            [
-                python,
-                "-m",
-                "pip",
-                "install",
-                "--editable",
-                str(ROOT),
-                "--no-deps",
-                "--no-build-isolation",
-            ]
-        )
+            sync_command.extend(["--extra", args.database])
+        _run(sync_command)
     except (OSError, subprocess.CalledProcessError) as error:
         print(f"Falha ao preparar o ambiente: {error}", file=sys.stderr)
         if backup_created and BACKUP_VENV_DIR.exists():

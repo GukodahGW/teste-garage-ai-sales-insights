@@ -3,10 +3,15 @@
 ## Pré-requisitos
 
 - Python 3.11 ou superior.
+- `uv` instalado e disponível no `PATH`.
 - Acesso à internet.
 - `.env` e `cloudflare-api-key.txt` na raiz.
 - Provider `https://gemma.lontra-agil.online/v1` disponível.
 - Todos os comandos executados na raiz do repositório.
+
+As dependências são declaradas somente no `pyproject.toml`. O `uv.lock` é o artefato
+resolvido correspondente; o bootstrap usa `uv sync --locked` e falha se ele estiver
+desatualizado. Depois de alterar dependências, atualize-o deliberadamente com `uv lock`.
 
 ## Windows — PowerShell
 

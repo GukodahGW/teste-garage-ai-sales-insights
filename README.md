@@ -38,9 +38,9 @@ Ao criar o runtime, a API aplica as migrações pendentes antes de começar a at
 ```powershell
 cd C:\caminho\teste-garage-ai-sales-insights
 
-.\.venv\Scripts\python.exe demo\top_products.py
+python.exe demo\top_products.py
 
-.\.venv\Scripts\python.exe demo\sales_insights.py `
+python.exe demo\sales_insights.py `
   "Qual foi o total de vendas do ano de 2025"
 ```
 
@@ -67,9 +67,9 @@ python3 scripts/verify.py
 ```bash
 cd /caminho/teste-garage-ai-sales-insights
 
-./.venv/bin/python demo/top_products.py
+python demo/top_products.py
 
-./.venv/bin/python demo/sales_insights.py \
+python demo/sales_insights.py \
   "Qual foi o total de vendas do ano de 2025"
 ```
 

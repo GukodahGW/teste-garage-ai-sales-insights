@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VENV_DIR = ROOT / ".venv"
+BACKUP_VENV_DIR = ROOT / ".venv.previous"
 PIP_VERSION = "26.1.2"
 
 
@@ -51,47 +52,80 @@ def main() -> int:
 
     args = _parse_args()
     virtual_python = _venv_python()
+    backup_created = False
 
     if args.recreate and VENV_DIR.exists():
         if Path(sys.prefix).resolve() == VENV_DIR.resolve():
             print("Execute --recreate usando um Python externo a .venv.", file=sys.stderr)
             return 2
-        shutil.rmtree(VENV_DIR)
+        if BACKUP_VENV_DIR.exists():
+            try:
+                shutil.rmtree(BACKUP_VENV_DIR)
+            except PermissionError:
+                print(
+                    "Nao foi possivel remover .venv.previous. Feche processos que a usam.",
+                    file=sys.stderr,
+                )
+                return 2
+        try:
+            VENV_DIR.rename(BACKUP_VENV_DIR)
+        except OSError as error:
+            print(f"Nao foi possivel preparar a recriacao: {error}", file=sys.stderr)
+            return 2
+        backup_created = True
 
-    if not virtual_python.exists():
-        print(f"Criando ambiente virtual em {VENV_DIR}", flush=True)
-        venv.EnvBuilder(with_pip=True).create(VENV_DIR)
+    try:
+        if not virtual_python.exists():
+            print(f"Criando ambiente virtual em {VENV_DIR}", flush=True)
+            venv.EnvBuilder(with_pip=True).create(VENV_DIR)
 
-    python = str(virtual_python)
-    _run([python, "-m", "pip", "install", "--upgrade", f"pip=={PIP_VERSION}"])
+        python = str(virtual_python)
+        _run([python, "-m", "pip", "install", "--upgrade", f"pip=={PIP_VERSION}"])
 
-    dependency_file = "dev.lock" if args.dev else "runtime.lock"
-    install_command = [
-        python,
-        "-m",
-        "pip",
-        "install",
-        "--requirement",
-        str(ROOT / "requirements" / dependency_file),
-    ]
-    if args.database != "sqlite":
-        install_command.extend(
-            ["--requirement", str(ROOT / "requirements" / f"{args.database}.lock")]
-        )
-    _run(install_command)
-
-    _run(
-        [
+        dependency_file = "dev.lock" if args.dev else "runtime.lock"
+        install_command = [
             python,
             "-m",
             "pip",
             "install",
-            "--editable",
-            str(ROOT),
-            "--no-deps",
-            "--no-build-isolation",
+            "--requirement",
+            str(ROOT / "requirements" / dependency_file),
         ]
-    )
+        if args.database != "sqlite":
+            install_command.extend(
+                ["--requirement", str(ROOT / "requirements" / f"{args.database}.lock")]
+            )
+        _run(install_command)
+
+        _run(
+            [
+                python,
+                "-m",
+                "pip",
+                "install",
+                "--editable",
+                str(ROOT),
+                "--no-deps",
+                "--no-build-isolation",
+            ]
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        print(f"Falha ao preparar o ambiente: {error}", file=sys.stderr)
+        if backup_created and BACKUP_VENV_DIR.exists():
+            shutil.rmtree(VENV_DIR, ignore_errors=True)
+            if not VENV_DIR.exists():
+                BACKUP_VENV_DIR.rename(VENV_DIR)
+                print("O ambiente anterior foi restaurado.", file=sys.stderr)
+        return 1
+
+    if BACKUP_VENV_DIR.exists():
+        try:
+            shutil.rmtree(BACKUP_VENV_DIR)
+        except PermissionError:
+            print(
+                "Aviso: .venv.previous ainda esta em uso e pode ser removida depois.",
+                file=sys.stderr,
+            )
 
     print("\nAmbiente pronto. Execute: python scripts/run.py --help")
     if args.dev:
@@ -101,4 +135,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

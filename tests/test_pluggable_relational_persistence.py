@@ -22,6 +22,9 @@ class FakeSaleRepository:
     def get_by_id(self, sale_id: int) -> Sale | None:
         return next((sale for sale in self._sales if sale.id == sale_id), None)
 
+    def get_latest(self) -> Sale | None:
+        return self._sales[-1] if self._sales else None
+
     def find(self, criteria: SaleCriteria) -> list[Sale]:
         return self._sales[criteria.offset : criteria.offset + criteria.limit]
 
@@ -42,7 +45,7 @@ class EmptyProductRepository:
         return []
 
 
-class FakeReadUnitOfWork:
+class FakeRelationalReadUnitOfWork:
     sales: SaleReadRepository
     customers: CustomerReadRepository
     products: ProductReadRepository
@@ -64,15 +67,15 @@ class FakeReadUnitOfWork:
         return None
 
 
-class FakePersistence:
+class FakeRelationalPersistence:
     def __init__(self, sales: list[Sale]) -> None:
         self._sales = sales
 
-    def read(self) -> FakeReadUnitOfWork:
-        return FakeReadUnitOfWork(self._sales)
+    def read(self) -> FakeRelationalReadUnitOfWork:
+        return FakeRelationalReadUnitOfWork(self._sales)
 
 
-def test_query_service_accepts_another_persistence_implementation() -> None:
+def test_query_service_accepts_another_relational_implementation() -> None:
     from datetime import UTC, datetime
     from decimal import Decimal
 
@@ -82,6 +85,6 @@ def test_query_service_accepts_another_persistence_implementation() -> None:
         total_amount=Decimal("42.00"),
         sold_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
-    queries = SalesQueries(FakePersistence([expected]))
+    queries = SalesQueries(FakeRelationalPersistence([expected]))
 
     assert queries.get_sale_by_id(7) == expected

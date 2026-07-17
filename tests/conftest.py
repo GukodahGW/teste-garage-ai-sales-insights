@@ -8,13 +8,13 @@ from garage_sales.infrastructure.sqlalchemy import (
     CustomerModel,
     ProductModel,
     SaleModel,
-    SqlAlchemyPersistence,
+    SqlAlchemyRelationalPersistence,
 )
 
 
 @pytest.fixture
-def persistence() -> Iterator[SqlAlchemyPersistence]:
-    adapter = SqlAlchemyPersistence("sqlite+pysqlite:///:memory:")
+def relational_persistence() -> Iterator[SqlAlchemyRelationalPersistence]:
+    adapter = SqlAlchemyRelationalPersistence("sqlite+pysqlite:///:memory:")
     adapter.create_schema()
 
     with adapter.session_factory.begin() as session:
@@ -38,19 +38,25 @@ def persistence() -> Iterator[SqlAlchemyPersistence]:
                 ),
                 SaleModel(
                     id=100,
+                    product_id=1,
                     customer_id=1,
+                    quantity=2,
                     total_amount=Decimal("120.00"),
                     sold_at=datetime(2026, 1, 10, 12, tzinfo=UTC),
                 ),
                 SaleModel(
                     id=101,
+                    product_id=2,
                     customer_id=1,
+                    quantity=1,
                     total_amount=Decimal("80.00"),
                     sold_at=datetime(2026, 2, 10, 12, tzinfo=UTC),
                 ),
                 SaleModel(
                     id=102,
+                    product_id=1,
                     customer_id=2,
+                    quantity=3,
                     total_amount=Decimal("300.00"),
                     sold_at=datetime(2026, 3, 10, 12, tzinfo=UTC),
                 ),

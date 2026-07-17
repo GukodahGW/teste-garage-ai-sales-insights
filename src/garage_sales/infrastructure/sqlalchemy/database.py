@@ -6,11 +6,13 @@ from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session, sessionmaker
 
 from garage_sales.infrastructure.sqlalchemy.models import Base
-from garage_sales.infrastructure.sqlalchemy.unit_of_work import SqlAlchemyReadUnitOfWork
+from garage_sales.infrastructure.sqlalchemy.unit_of_work import (
+    SqlAlchemyRelationalReadUnitOfWork,
+)
 
 
-class SqlAlchemyPersistence:
-    """Adaptador SQLAlchemy; o dialeto e selecionado somente pela URL."""
+class SqlAlchemyRelationalPersistence:
+    """Adaptador relacional SQLAlchemy; o dialeto e selecionado pela URL."""
 
     def __init__(
         self,
@@ -28,8 +30,8 @@ class SqlAlchemyPersistence:
             expire_on_commit=False,
         )
 
-    def read(self) -> SqlAlchemyReadUnitOfWork:
-        return SqlAlchemyReadUnitOfWork(self.session_factory)
+    def read(self) -> SqlAlchemyRelationalReadUnitOfWork:
+        return SqlAlchemyRelationalReadUnitOfWork(self.session_factory)
 
     def create_schema(self) -> None:
         """Cria o schema para testes/demos; em producao, prefira migracoes Alembic."""
@@ -37,4 +39,3 @@ class SqlAlchemyPersistence:
 
     def dispose(self) -> None:
         self.engine.dispose()
-

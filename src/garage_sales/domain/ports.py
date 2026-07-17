@@ -1,12 +1,15 @@
 from types import TracebackType
 from typing import Protocol, Self
 
+from garage_sales.domain.analytics import AnalysisDataset, SalesAnalysisQuery
 from garage_sales.domain.criteria import CustomerCriteria, ProductCriteria, SaleCriteria
 from garage_sales.domain.entities import Customer, Product, Sale
 
 
 class SaleReadRepository(Protocol):
     def get_by_id(self, sale_id: int) -> Sale | None: ...
+
+    def get_latest(self) -> Sale | None: ...
 
     def find(self, criteria: SaleCriteria) -> list[Sale]: ...
 
@@ -23,7 +26,13 @@ class ProductReadRepository(Protocol):
     def find(self, criteria: ProductCriteria) -> list[Product]: ...
 
 
-class ReadUnitOfWork(Protocol):
+class SalesAnalyticsRepository(Protocol):
+    """Execute only validated semantic queries; never arbitrary SQL."""
+
+    def execute(self, query: SalesAnalysisQuery) -> AnalysisDataset: ...
+
+
+class RelationalReadUnitOfWork(Protocol):
     sales: SaleReadRepository
     customers: CustomerReadRepository
     products: ProductReadRepository
@@ -38,8 +47,11 @@ class ReadUnitOfWork(Protocol):
     ) -> None: ...
 
 
-class StructuredPersistence(Protocol):
-    """Porta usada pela aplicacao para abrir uma unidade de leitura."""
+class RelationalAnalyticsReadUnitOfWork(RelationalReadUnitOfWork, Protocol):
+    analytics: SalesAnalyticsRepository
 
-    def read(self) -> ReadUnitOfWork: ...
 
+class RelationalPersistence(Protocol):
+    """Porta para consultas em um banco de dados relacional."""
+
+    def read(self) -> RelationalReadUnitOfWork: ...

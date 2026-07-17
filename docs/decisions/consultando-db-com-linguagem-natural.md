@@ -1,90 +1,92 @@
-# Interpretação de consultas em linguagem natural
+# Catálogo fundamental para insights de vendas em linguagem natural
+
+## Status
+
+Substituída por
+[Álgebra analítica tipada para sales insights](./algebra-analitica-de-vendas.md). Este
+documento preserva a decisão intermediária que corrigiu os cálculos simples antes da adoção
+do modelo completo; seu catálogo não descreve o comportamento atual.
+
+## Contexto
+
+Um modelo de linguagem é útil para reconhecer formulações diferentes da mesma intenção,
+mas não é um mecanismo confiável para somar valores, contar registros, calcular médias ou
+ordenar rankings. Entregar linhas de venda ao modelo e pedir uma resposta transfere regras
+de negócio e aritmética exata para um componente probabilístico.
+
+O domínio deste serviço é pequeno. Não precisamos de um agente genérico capaz de montar
+sequências arbitrárias de consultas. Precisamos reconhecer poucas perguntas recorrentes e
+executá-las com semântica estável.
 
 ## Decisão
 
-A aplicação utilizará inicialmente o Gemma 4B para transformar perguntas sobre vendas em um plano estruturado de consulta.
-
-O modelo será responsável apenas por interpretar a linguagem do usuário. Ele não terá acesso direto ao banco de dados e não produzirá SQL para execução.
-
-## Motivação de curto prazo
-
-O uso do Gemma 4B reduz o esforço inicial necessário para lidar com diferentes maneiras de formular uma mesma pergunta.
-
-Isso permite:
-
-* validar rapidamente a experiência proposta;
-* descobrir quais perguntas os usuários realmente fazem;
-* identificar ambiguidades e operações recorrentes;
-* evitar a construção antecipada de uma gramática extensa.
-
-O custo dessa escolha é um maior consumo de memória, processamento e tempo de resposta.
-
-## Possível evolução
-
-Como o domínio de consultas é limitado a vendas, clientes e produtos, uma parte significativa das interpretações poderá futuramente ser realizada por um parser semântico especializado.
-
-Esse parser poderá combinar:
-
-* normalização de termos;
-* identificação de intenções;
-* extração de datas, valores e entidades;
-* regras de domínio;
-* classificação textual leve.
-
-Essa solução exigirá maior investimento de desenvolvimento e manutenção, mas poderá reduzir consideravelmente o custo computacional em longo prazo.
-
-## Implementação plugável
-
-A camada de aplicação não dependerá diretamente do Gemma.
-
-Será definido um contrato comum:
-
-```python
-from typing import Protocol
-
-class QueryInterpreter(Protocol):
-    async def interpret(self, question: str) -> QueryPlan:
-        ...
-```
-
-Diferentes implementações poderão atender ao mesmo contrato:
+O modelo será usado somente como classificador e extrator de período. Ele produzirá no
+máximo uma operação de um catálogo fechado:
 
 ```text
-GemmaQueryInterpreter
-SemanticParserQueryInterpreter
-HybridQueryInterpreter
+sales.calculate(metric, sold_from, sold_until)
+sales.top_products(sold_from, sold_until, limit)
 ```
 
-O fluxo permanecerá o mesmo:
+`sales.calculate` aceita somente estas métricas:
+
+- `revenue`: soma de `sales.total_amount`;
+- `sale_count`: quantidade de vendas;
+- `units_sold`: soma de `sales.quantity`;
+- `average_ticket`: `revenue / sale_count`, com `Decimal` e arredondamento explícito.
+
+`sales.top_products` soma unidades por produto e aplica ordenação e limite em código
+determinístico.
+
+Período, métrica e limite são os únicos elementos que o planner pode escolher. O executor
+percorre todas as páginas dos repositories antes de calcular, evitando totais parciais. Um
+sintetizador determinístico formata apenas valores já calculados.
+
+Perguntas que exijam previsão, causalidade, SQL, registros individuais, comparação entre
+períodos, agrupamento por cliente ou vários insights simultâneos retornam um plano vazio e
+uma explicação do catálogo suportado. Elas não são parcialmente respondidas nem encaminhadas
+a um modelo para cálculo livre.
+
+## Fluxo
 
 ```text
 Pergunta
-   ↓
-QueryInterpreter
-   ↓
-QueryPlan validado
-   ↓
-Dispatcher
-   ↓
-Repositories
-   ↓
-SQLAlchemy
+   |
+   v
+SalesQueryPlanner (não determinístico: classifica intenção e período)
+   |
+   v
+SalesQueryPlan (zero ou uma operação validada)
+   |
+   v
+RepositorySalesQueryExecutor (determinístico: pagina, soma, conta, divide e ordena)
+   |
+   v
+SalesQueryEvidence (valores já calculados)
+   |
+   v
+DeterministicSalesInsightSynthesizer (determinístico: formata)
+   |
+   v
+Resposta
 ```
 
-Dessa forma, o Gemma poderá ser substituído, complementado ou utilizado apenas como fallback sem alterar os repositories ou as regras de execução.
+## Invariantes
 
-## Estratégia de longo prazo
+- O modelo nunca recebe valores monetários ou linhas para agregar.
+- O plano nunca contém mais de uma operação.
+- Operações desconhecidas e planos compostos são rejeitados pelo parser tipado.
+- Nenhuma página limitada de repository é tratada como conjunto completo.
+- Valores monetários são calculados com `Decimal`.
+- O texto final não pode alterar, recalcular ou inferir valores.
+- A pergunta de regressão sobre o total de 2025 deve resultar em 33 vendas e `R$ 2.309,78`.
 
-As perguntas recebidas e os planos aprovados poderão ser armazenados como exemplos de domínio.
+## Consequências
 
-Com esses dados, será possível implementar progressivamente um parser semântico para as consultas mais frequentes:
+O serviço deixa de responder perguntas abertas fora do catálogo. Essa limitação é
+intencional: capacidades novas devem entrar como novas primitivas determinísticas, com
+contrato e testes, antes de serem ensinadas ao planner.
 
-```text
-Parser semântico
-   ↓
-Interpretação confiável?
-   ├── Sim → executar o plano
-   └── Não → utilizar o Gemma
-```
-
-Essa abordagem preserva a flexibilidade linguística inicial e permite reduzir gradualmente o custo de inferência.
+Em troca, respostas suportadas têm semântica verificável, testes sem inferência, menor
+latência e apenas uma chamada ao modelo. Trocar Gemma por outro classificador continua
+possível sem alterar cálculos, persistence ou adaptadores de entrada.

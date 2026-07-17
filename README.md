@@ -1,115 +1,93 @@
-# Garage AI Sales Insights
+# Tutorial de execução
 
-Camada de consultas plugavel com contratos de dominio e SQLAlchemy. O runtime local e
-sempre executado pela `.venv` deste repositorio.
+## Pré-requisitos
 
-## Preparacao em outro computador
+- Python 3.11 ou superior.
+- Acesso à internet.
+- `.env` e `cloudflare-api-key.txt` na raiz.
+- Provider `https://gemma.lontra-agil.online/v1` disponível.
+- Todos os comandos executados na raiz do repositório.
 
-Pre-requisito: Python 3.11 ou superior e acesso à internet na primeira instalacao. Nao e
-necessario instalar SQLAlchemy, pytest ou qualquer outra dependencia globalmente.
+## Windows — PowerShell
 
-Windows:
+### Terminal 1: instalação e API
+
+Antes de repetir o bootstrap no Windows, encerre qualquer instância de
+`garage-sales-api.exe`. O sistema operacional mantém esse entrypoint bloqueado enquanto a
+API está em execução e impede a reinstalação editável do pacote.
 
 ```powershell
-py -3 scripts/bootstrap.py
+cd C:\caminho\teste-garage-ai-sales-insights
+
+py -3 scripts/bootstrap.py --dev
+
 py -3 scripts/run.py init-db
 py -3 scripts/run.py check-db
+py -3 scripts/run.py list-sales
+
+py -3 scripts/verify.py
+
+.\.venv\Scripts\garage-sales-api.exe
 ```
 
-Linux ou macOS:
+A última instrução mantém o terminal ocupado executando a API.
+Ao criar o runtime, a API aplica as migrações pendentes antes de começar a atender.
 
-```bash
-python3 scripts/bootstrap.py
-python3 scripts/run.py init-db
-python3 scripts/run.py check-db
-```
-
-O primeiro comando cria `.venv`, instala as versoes fixadas em `requirements/` e instala
-este projeto dentro dela. `run.py` sempre usa o Python dessa `.venv`; nao e preciso
-ativa-la manualmente.
-
-Para recriar o ambiente do zero:
-
-```text
-python scripts/bootstrap.py --recreate
-```
-
-O diretorio `.venv` nao deve ser versionado: ele contem binarios diferentes para Windows,
-Linux e macOS. O que deve estar no repositorio sao o bootstrap e os arquivos `.lock` que
-permitem reproduzi-lo.
-
-## Execucao
-
-```text
-python scripts/run.py check-db
-python scripts/run.py init-db
-python scripts/run.py list-sales
-python scripts/run.py list-sales --customer-id 3 --min-total 100.00
-```
-
-`init-db` serve para desenvolvimento e prototipos. Em producao, use migracoes Alembic.
-
-## Desenvolvimento
-
-```text
-python scripts/bootstrap.py --dev
-python scripts/verify.py
-```
-
-`verify.py` executa testes, Ruff e Mypy com as ferramentas da `.venv`.
-
-## Banco de dados
-
-SQLite e o padrao e nao exige driver adicional. Para preparar outro driver:
-
-```text
-python scripts/bootstrap.py --database postgres
-python scripts/bootstrap.py --database mysql
-```
-
-Configure a conexao pela variavel `GARAGE_DATABASE_URL`:
-
-```text
-SQLite:     sqlite+pysqlite:///./garage.db
-PostgreSQL: postgresql+psycopg://usuario:senha@localhost/garage
-MySQL:      mysql+pymysql://usuario:senha@localhost/garage
-```
-
-PowerShell:
+### Terminal 2: demos
 
 ```powershell
-$env:GARAGE_DATABASE_URL = "postgresql+psycopg://usuario:senha@localhost/garage"
-py -3 scripts/run.py check-db
+cd C:\caminho\teste-garage-ai-sales-insights
+
+.\.venv\Scripts\python.exe demo\top_products.py
+
+.\.venv\Scripts\python.exe demo\sales_insights.py `
+  "Qual foi o total de vendas do ano de 2025"
 ```
 
-Bash:
+## Linux e macOS
+
+### Terminal 1: instalação e API
 
 ```bash
-export GARAGE_DATABASE_URL="postgresql+psycopg://usuario:senha@localhost/garage"
+cd /caminho/teste-garage-ai-sales-insights
+
+python3 scripts/bootstrap.py --dev
+
+python3 scripts/run.py init-db
 python3 scripts/run.py check-db
+python3 scripts/run.py list-sales
+
+python3 scripts/verify.py
+
+./.venv/bin/garage-sales-api
 ```
 
-As variaveis aceitas estao documentadas em `runtime.env.example`. Esse arquivo e somente
-um modelo; credenciais reais nao devem ser versionadas.
+### Terminal 2: demos
 
-## Arquitetura
+```bash
+cd /caminho/teste-garage-ai-sales-insights
 
-```text
-application/queries.py
-         |
-         v
-domain/ports.py  <---- contrato implementado por qualquer adaptador
-         ^
-         |
-infrastructure/sqlalchemy/ ----> SQLite | PostgreSQL | MySQL
+./.venv/bin/python demo/top_products.py
+
+./.venv/bin/python demo/sales_insights.py \
+  "Qual foi o total de vendas do ano de 2025"
 ```
 
-- `domain/`: entidades, criterios e contratos sem dependencia de SQLAlchemy.
-- `application/`: operacoes como `get_sale_by_id` e `get_sales_by`.
-- `infrastructure/sqlalchemy/`: modelos ORM, consultas e controle de sessao.
-- `requirements/`: versoes exatas de runtime, desenvolvimento e drivers.
-- `scripts/`: preparacao, execucao e verificacao do ambiente.
+O resultado deve ter status HTTP `200`, conter `R$ 2.309,78` e pode incluir o dataset
+analítico estruturado. Um trecho representativo da resposta é:
 
-Uma persistencia diferente pode ser conectada implementando `StructuredPersistence` e
-devolvendo uma unidade de trabalho com os mesmos repositorios.
-
+```json
+{
+  "answer": "Resultado: ano=2025: receita=R$ 2.309,78.",
+  "data": [
+    {
+      "rows": [
+        {
+          "dimensions": [{"name": "year", "value": "2025"}],
+          "metrics": [{"name": "revenue", "value": "2309.78"}]
+        }
+      ]
+    }
+  ]
+}
+```

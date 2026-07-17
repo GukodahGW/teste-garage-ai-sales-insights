@@ -12,6 +12,8 @@ def _to_sale(model: SaleModel) -> Sale:
         customer_id=model.customer_id,
         total_amount=model.total_amount,
         sold_at=model.sold_at,
+        product_id=model.product_id,
+        quantity=model.quantity,
     )
 
 
@@ -26,6 +28,7 @@ def _to_product(model: ProductModel) -> Product:
         name=model.name,
         unit_price=model.unit_price,
         active=model.active,
+        category=model.category,
     )
 
 
@@ -35,6 +38,13 @@ class SqlAlchemySaleReadRepository:
 
     def get_by_id(self, sale_id: int) -> Sale | None:
         model = self._session.get(SaleModel, sale_id)
+        return _to_sale(model) if model else None
+
+    def get_latest(self) -> Sale | None:
+        statement = (
+            select(SaleModel).order_by(SaleModel.sold_at.desc(), SaleModel.id.desc()).limit(1)
+        )
+        model = self._session.scalar(statement)
         return _to_sale(model) if model else None
 
     def find(self, criteria: SaleCriteria) -> list[Sale]:
@@ -104,4 +114,3 @@ class SqlAlchemyProductReadRepository:
         statement = statement.order_by(ProductModel.name, ProductModel.id)
         statement = statement.limit(criteria.limit).offset(criteria.offset)
         return [_to_product(model) for model in self._session.scalars(statement)]
-

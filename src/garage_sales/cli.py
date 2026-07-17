@@ -6,8 +6,10 @@ from decimal import Decimal
 from sqlalchemy import text
 
 from garage_sales.application import SalesQueries
-from garage_sales.bootstrap import build_persistence
+from garage_sales.bootstrap import build_relational_persistence
+from garage_sales.config import load_runtime_env
 from garage_sales.domain import SaleCriteria
+from garage_sales.infrastructure.sqlalchemy.migrations import upgrade_database
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -15,7 +17,8 @@ def _parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("check-db", help="valida a conexao com o banco configurado")
-    subparsers.add_parser("init-db", help="cria o schema para desenvolvimento local")
+    subparsers.add_parser("init-db", help="aplica as migracoes e os seeds pendentes")
+    subparsers.add_parser("migrate-db", help="aplica as migracoes e os seeds pendentes")
 
     sales = subparsers.add_parser("list-sales", help="lista vendas usando os repositorios")
     sales.add_argument("--customer-id", type=int)
@@ -27,19 +30,22 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    load_runtime_env()
     args = _parser().parse_args(argv)
-    persistence = build_persistence()
+    relational_persistence = build_relational_persistence()
 
     try:
         if args.command == "check-db":
-            with persistence.engine.connect() as connection:
+            with relational_persistence.engine.connect() as connection:
                 connection.execute(text("SELECT 1")).scalar_one()
-            print(f"Conexao OK: {persistence.engine.dialect.name}")
+            print(f"Conexao OK: {relational_persistence.engine.dialect.name}")
             return 0
 
-        if args.command == "init-db":
-            persistence.create_schema()
-            print(f"Schema criado: {persistence.engine.dialect.name}")
+        if args.command in {"init-db", "migrate-db"}:
+            upgrade_database(relational_persistence.engine.url)
+            print(
+                f"Migracoes aplicadas e seed validado: {relational_persistence.engine.dialect.name}"
+            )
             return 0
 
         criteria = SaleCriteria(
@@ -49,7 +55,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             limit=args.limit,
             offset=args.offset,
         )
-        sales = SalesQueries(persistence).get_sales_by(criteria)
+        sales = SalesQueries(relational_persistence).get_sales_by(criteria)
         result = [
             {
                 "id": sale.id,
@@ -62,5 +68,4 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(result, indent=2))
         return 0
     finally:
-        persistence.dispose()
-
+        relational_persistence.dispose()

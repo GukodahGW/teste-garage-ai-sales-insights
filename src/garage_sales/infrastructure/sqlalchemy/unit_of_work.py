@@ -7,6 +7,10 @@ from garage_sales.domain.ports import (
     CustomerReadRepository,
     ProductReadRepository,
     SaleReadRepository,
+    SalesAnalyticsRepository,
+)
+from garage_sales.infrastructure.sqlalchemy.analytics import (
+    SqlAlchemySalesAnalyticsRepository,
 )
 from garage_sales.infrastructure.sqlalchemy.repositories import (
     SqlAlchemyCustomerReadRepository,
@@ -15,10 +19,11 @@ from garage_sales.infrastructure.sqlalchemy.repositories import (
 )
 
 
-class SqlAlchemyReadUnitOfWork:
+class SqlAlchemyRelationalReadUnitOfWork:
     sales: SaleReadRepository
     customers: CustomerReadRepository
     products: ProductReadRepository
+    analytics: SalesAnalyticsRepository
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
@@ -32,6 +37,7 @@ class SqlAlchemyReadUnitOfWork:
         self.sales = SqlAlchemySaleReadRepository(self._session)
         self.customers = SqlAlchemyCustomerReadRepository(self._session)
         self.products = SqlAlchemyProductReadRepository(self._session)
+        self.analytics = SqlAlchemySalesAnalyticsRepository(self._session)
         return self
 
     def __exit__(
@@ -43,4 +49,3 @@ class SqlAlchemyReadUnitOfWork:
         if self._session is not None:
             self._session.close()
             self._session = None
-

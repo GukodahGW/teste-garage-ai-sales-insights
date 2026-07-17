@@ -1,2 +1,1 @@
-"""Garage Sales: contratos de dominio e adaptadores de persistencia."""
-
+"""Garage Sales: contratos de dominio e adaptadores para bancos relacionais."""

@@ -1,10 +1,9 @@
-from decimal import Decimal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from garage_sales.domain.analytics import AnalysisStatus
-
 MAX_QUESTION_LENGTH = 2_000
+MAX_CURSOR_LENGTH = 4_096
 
 
 class SalesInsightsQuery(BaseModel):
@@ -18,38 +17,30 @@ class SalesInsightsQuery(BaseModel):
         description="Pergunta sobre vendas escrita em linguagem natural.",
         examples=["Qual foi o produto mais vendido na ultima semana?"],
     )
+    cursor: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=MAX_CURSOR_LENGTH,
+        description="Cursor opaco retornado pela pagina anterior da mesma comparacao.",
+    )
+    include_plan: bool = Field(
+        default=False,
+        description="Inclui o plano analitico tipado para diagnostico e avaliacao.",
+    )
 
 
 class SalesInsightResponse(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     answer: str = Field(description="Resposta produzida a partir dos dados de vendas.")
-    status: AnalysisStatus = AnalysisStatus.ANSWERED
-    data: list["AnalysisDatasetResponse"] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
-
-
-class AnalysisCellResponse(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    name: str
-    value: Decimal | int | str | bool | None
-
-
-class AnalysisRowResponse(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    dimensions: list[AnalysisCellResponse] = Field(default_factory=list)
-    metrics: list[AnalysisCellResponse] = Field(default_factory=list)
-
-
-class AnalysisDatasetResponse(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    status: AnalysisStatus = AnalysisStatus.ANSWERED
-    rows: list[AnalysisRowResponse] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
-    metadata: list[AnalysisCellResponse] = Field(default_factory=list)
+    next_cursor: str | None = Field(
+        default=None,
+        description="Cursor opaco para a proxima pagina da comparacao.",
+    )
+    plan: dict[str, Any] | None = Field(
+        default=None,
+        description="Plano analitico validado, presente somente quando solicitado.",
+    )
 
 
 class TopProductResponse(BaseModel):

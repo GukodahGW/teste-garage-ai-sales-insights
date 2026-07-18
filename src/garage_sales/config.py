@@ -9,6 +9,8 @@ DEFAULT_LLM_PROVIDER = "gemma"
 DEFAULT_LLM_BASE_URL = "http://127.0.0.1:8080/v1"
 DEFAULT_LLM_MODEL = "gemma-4-e4b-it"
 DEFAULT_LLM_API_KEY = "sk-no-key-required"
+DEFAULT_PLANNER_DATE_VALIDATION_MAX_RETRIES = 2
+DEFAULT_PLANNER_FILTER_VALIDATION_MAX_RETRIES = 2
 _ENVIRONMENT_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
@@ -85,6 +87,31 @@ class RelationalDatabaseSettings:
         return cls(
             url=os.getenv(f"{prefix}DATABASE_URL", DEFAULT_RELATIONAL_DATABASE_URL),
             echo=echo_value in {"1", "true", "yes", "on"},
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SalesQueryPlannerSettings:
+    date_validation_max_retries: int = DEFAULT_PLANNER_DATE_VALIDATION_MAX_RETRIES
+    filter_validation_max_retries: int = DEFAULT_PLANNER_FILTER_VALIDATION_MAX_RETRIES
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.date_validation_max_retries <= 5:
+            raise ValueError("date_validation_max_retries deve estar entre 0 e 5")
+        if not 0 <= self.filter_validation_max_retries <= 5:
+            raise ValueError("filter_validation_max_retries deve estar entre 0 e 5")
+
+    @classmethod
+    def from_env(cls, prefix: str = "GARAGE_") -> "SalesQueryPlannerSettings":
+        return cls(
+            date_validation_max_retries=_int_from_env(
+                f"{prefix}PLANNER_DATE_VALIDATION_MAX_RETRIES",
+                default=DEFAULT_PLANNER_DATE_VALIDATION_MAX_RETRIES,
+            ),
+            filter_validation_max_retries=_int_from_env(
+                f"{prefix}PLANNER_FILTER_VALIDATION_MAX_RETRIES",
+                default=DEFAULT_PLANNER_FILTER_VALIDATION_MAX_RETRIES,
+            ),
         )
 
 

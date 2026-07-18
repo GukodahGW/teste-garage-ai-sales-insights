@@ -22,6 +22,13 @@ def get_json(url: str, *, timeout: float = 180.0) -> int:
     except HTTPError as error:
         status = error.code
         body = error.read().decode("utf-8", errors="replace")
+    except TimeoutError:
+        print(
+            f"A API nao respondeu em {timeout:g} segundos. "
+            "Verifique a disponibilidade do provedor LLM e tente novamente.",
+            file=sys.stderr,
+        )
+        return 1
     except URLError as error:
         print(f"Falha ao conectar com a API: {error.reason}", file=sys.stderr)
         return 1

@@ -2,9 +2,12 @@ from fastapi.testclient import TestClient
 
 from garage_sales.adapters.http import create_app
 from garage_sales.application import (
+    AggregateSales,
     SalesInsight,
+    SalesMetric,
     SalesMonth,
     SalesPlanningError,
+    SalesQueryPlan,
     TopProduct,
     TopProductsResult,
 )
@@ -14,9 +17,29 @@ class StubGetSalesInsights:
     def __init__(self) -> None:
         self.received_question: str | None = None
 
-    def execute(self, *, question: str) -> SalesInsight:
+    def execute(self, *, question: str, cursor: str | None = None) -> SalesInsight:
+        del cursor
         self.received_question = question
         return SalesInsight(answer="A furadeira foi o produto mais vendido.")
+
+
+class StubPagedSalesInsights:
+    def __init__(self) -> None:
+        self.received_cursor: str | None = None
+
+    def execute(self, *, question: str, cursor: str | None = None) -> SalesInsight:
+        del question
+        self.received_cursor = cursor
+        return SalesInsight(answer="Pagina seguinte.", next_cursor="next-page")
+
+
+class StubDiagnosticSalesInsights:
+    def execute(self, *, question: str, cursor: str | None = None) -> SalesInsight:
+        del question, cursor
+        plan = SalesQueryPlan(
+            queries=(AggregateSales(metrics=(SalesMetric.REVENUE,)),)
+        )
+        return SalesInsight(answer="Receita calculada.", plan=plan)
 
 
 class StubGetTopProducts:
@@ -41,8 +64,8 @@ class StubGetTopProductsWithoutSales:
 
 
 class StubInvalidSalesPlan:
-    def execute(self, *, question: str) -> SalesInsight:
-        del question
+    def execute(self, *, question: str, cursor: str | None = None) -> SalesInsight:
+        del question, cursor
         raise SalesPlanningError("nao foi possivel produzir um plano valido")
 
 
@@ -59,6 +82,44 @@ def test_sales_insights_endpoint_normalizes_input_and_serializes_output() -> Non
     assert response.headers["content-type"] == "application/json"
     assert response.json() == {"answer": "A furadeira foi o produto mais vendido."}
     assert use_case.received_question == "Qual foi o produto mais vendido na última semana?"
+
+
+def test_sales_insights_endpoint_propagates_comparison_cursors() -> None:
+    use_case = StubPagedSalesInsights()
+    client = TestClient(create_app(get_sales_insights=use_case))
+
+    response = client.get(
+        "/sales-insights",
+        params={"question": "Compare as categorias", "cursor": "current-page"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "answer": "Pagina seguinte.",
+        "next_cursor": "next-page",
+    }
+    assert use_case.received_cursor == "current-page"
+
+
+def test_sales_insights_endpoint_exposes_the_typed_plan_only_when_requested() -> None:
+    client = TestClient(create_app(get_sales_insights=StubDiagnosticSalesInsights()))
+
+    regular = client.get("/sales-insights", params={"question": "Quanto vendemos?"})
+    diagnostic = client.get(
+        "/sales-insights",
+        params={"question": "Quanto vendemos?", "include_plan": "true"},
+    )
+
+    assert regular.json() == {"answer": "Receita calculada."}
+    assert diagnostic.status_code == 200
+    assert diagnostic.json()["plan"]["queries"][0] == {
+        "metrics": ["revenue"],
+        "dimensions": [],
+        "filters": [],
+        "period": {"start": None, "end": None},
+        "sort": [],
+        "limit": None,
+    }
 
 
 def test_sales_insights_endpoint_rejects_missing_blank_or_unknown_input() -> None:

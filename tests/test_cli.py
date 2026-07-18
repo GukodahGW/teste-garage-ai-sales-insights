@@ -4,6 +4,8 @@ from _pytest.capture import CaptureFixture
 from _pytest.monkeypatch import MonkeyPatch
 
 from garage_sales.cli import main
+from garage_sales.infrastructure.sqlalchemy.migrations import upgrade_database
+from scripts.seed import seed_database
 
 
 def test_runtime_cli_initializes_checks_and_queries_database(
@@ -12,15 +14,15 @@ def test_runtime_cli_initializes_checks_and_queries_database(
     capsys: CaptureFixture[str],
 ) -> None:
     database_path = (tmp_path / "runtime.db").as_posix()
-    monkeypatch.setenv("GARAGE_DATABASE_URL", f"sqlite+pysqlite:///{database_path}")
+    database_url = f"sqlite+pysqlite:///{database_path}"
+    monkeypatch.setenv("GARAGE_DATABASE_URL", database_url)
+    upgrade_database(database_url)
+    seed_database(database_url)
 
-    assert main(["init-db"]) == 0
-    assert main(["migrate-db"]) == 0
     assert main(["check-db"]) == 0
     assert main(["list-sales"]) == 0
 
     output = capsys.readouterr().out
-    assert output.count("Migracoes aplicadas e seed validado: sqlite") == 2
     assert "Conexao OK: sqlite" in output
     assert '"id": 33' in output
 
@@ -38,6 +40,7 @@ def test_runtime_cli_loads_database_configuration_from_dotenv(
     monkeypatch.delenv("GARAGE_DATABASE_URL")
     monkeypatch.chdir(tmp_path)
 
-    assert main(["init-db"]) == 0
+    upgrade_database(f"sqlite+pysqlite:///{database_path}")
+    assert main(["check-db"]) == 0
 
     assert (tmp_path / "from-dotenv.db").is_file()

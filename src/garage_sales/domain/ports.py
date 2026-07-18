@@ -1,7 +1,13 @@
+from datetime import datetime
 from types import TracebackType
 from typing import Protocol, Self
 
-from garage_sales.domain.analytics import AnalysisDataset, SalesAnalysisQuery
+from garage_sales.domain.analytics import (
+    AggregateSales,
+    CompareSales,
+    ProductSalesTotal,
+    SalesAnalysisResult,
+)
 from garage_sales.domain.criteria import CustomerCriteria, ProductCriteria, SaleCriteria
 from garage_sales.domain.entities import Customer, Product, Sale
 
@@ -27,15 +33,31 @@ class ProductReadRepository(Protocol):
 
 
 class SalesAnalyticsRepository(Protocol):
-    """Execute only validated semantic queries; never arbitrary SQL."""
+    """Aggregate the existing sales table without exposing arbitrary SQL."""
 
-    def execute(self, query: SalesAnalysisQuery) -> AnalysisDataset: ...
+    def aggregate(self, query: AggregateSales) -> SalesAnalysisResult: ...
+
+    def compare(
+        self,
+        query: CompareSales,
+        *,
+        cursor: str | None = None,
+    ) -> SalesAnalysisResult: ...
+
+    def top_products(
+        self,
+        *,
+        sold_from: datetime | None = None,
+        sold_until: datetime | None = None,
+        limit: int = 5,
+    ) -> tuple[ProductSalesTotal, ...]: ...
 
 
 class RelationalReadUnitOfWork(Protocol):
     sales: SaleReadRepository
     customers: CustomerReadRepository
     products: ProductReadRepository
+    analytics: SalesAnalyticsRepository
 
     def __enter__(self) -> Self: ...
 
@@ -45,10 +67,6 @@ class RelationalReadUnitOfWork(Protocol):
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> None: ...
-
-
-class RelationalAnalyticsReadUnitOfWork(RelationalReadUnitOfWork, Protocol):
-    analytics: SalesAnalyticsRepository
 
 
 class RelationalPersistence(Protocol):

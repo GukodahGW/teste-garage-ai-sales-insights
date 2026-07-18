@@ -17,6 +17,21 @@ Informando outra pergunta:
 python demo/sales_insights.py "Qual foi o total de vendas de ontem?"
 ```
 
+Exemplos com agrupamento, ranking e comparação:
+
+```text
+python demo/sales_insights.py "Qual foi a semana de 2025 que mais vendeu?"
+python demo/sales_insights.py "Quais foram os cinco produtos mais vendidos em 2025?"
+python demo/sales_insights.py "Compare o faturamento de 2025 com 2024"
+```
+
+Comparações sem `limit` retornam até 100 grupos e podem incluir `next_cursor`. Para buscar a
+página seguinte, repita exatamente a mesma pergunta:
+
+```text
+python demo/sales_insights.py "Compare o faturamento por categoria de 2025 com 2024" --cursor CURSOR_RECEBIDO
+```
+
 ## GET /top-products
 
 ```text

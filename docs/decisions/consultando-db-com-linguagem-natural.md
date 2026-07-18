@@ -1,92 +1,80 @@
-# Catálogo fundamental para insights de vendas em linguagem natural
+# Álgebra limitada para insights de vendas em linguagem natural
 
 ## Status
 
-Substituída por
-[Álgebra analítica tipada para sales insights](./algebra-analitica-de-vendas.md). Este
-documento preserva a decisão intermediária que corrigiu os cálculos simples antes da adoção
-do modelo completo; seu catálogo não descreve o comportamento atual.
+Aceita.
 
 ## Contexto
 
-Um modelo de linguagem é útil para reconhecer formulações diferentes da mesma intenção,
-mas não é um mecanismo confiável para somar valores, contar registros, calcular médias ou
-ordenar rankings. Entregar linhas de venda ao modelo e pedir uma resposta transfere regras
-de negócio e aritmética exata para um componente probabilístico.
+Um modelo de linguagem é útil para reconhecer a intenção de uma pergunta, mas não deve
+somar valores, ordenar rankings nem criar SQL. Ao mesmo tempo, restringir o serviço a um
+único total por período deixa de fora perguntas comuns, como receita mensal, melhor semana,
+produto mais vendido ou crescimento entre dois anos.
 
-O domínio deste serviço é pequeno. Não precisamos de um agente genérico capaz de montar
-sequências arbitrárias de consultas. Precisamos reconhecer poucas perguntas recorrentes e
-executá-las com semântica estável.
+Essas perguntas podem ser respondidas com o schema existente: `sales`, `products` e
+`customers`. Não é necessário criar uma entidade de pedido.
 
 ## Decisão
 
-O modelo será usado somente como classificador e extrator de período. Ele produzirá no
-máximo uma operação de um catálogo fechado:
+O planner pode produzir zero ou uma operação de uma álgebra fechada:
 
 ```text
-sales.calculate(metric, sold_from, sold_until)
-sales.top_products(sold_from, sold_until, limit)
+sales.aggregate(metrics, dimensions, filters, period, sort, limit)
+sales.compare(metrics, dimensions, filters, current_period, baseline_period, sort, limit)
 ```
 
-`sales.calculate` aceita somente estas métricas:
+O vocabulário permitido é:
 
-- `revenue`: soma de `sales.total_amount`;
-- `sale_count`: quantidade de vendas;
-- `units_sold`: soma de `sales.quantity`;
-- `average_ticket`: `revenue / sale_count`, com `Decimal` e arredondamento explícito.
+- métricas: `revenue`, `sale_count`, `units_sold`, `average_ticket`;
+- dimensões: `product`, `category`, `customer`, `day`, `week`, `month`, `year`;
+- filtros: `product`, `category`, `customer` com `equals`, `contains` ou `in`;
+- ordenação crescente ou decrescente por uma métrica ou valor de comparação;
+- no máximo duas dimensões, uma delas temporal, e `limit` máximo de 100 linhas.
 
-`sales.top_products` soma unidades por produto e aplica ordenação e limite em código
-determinístico.
+`sales.compare` executa uma única agregação condicional sobre a união dos dois períodos e
+calcula no banco valor atual, valor base, diferença absoluta e variação percentual. Baseline
+zero produz variação indefinida, nunca infinita. Sem `limit`, a comparação é entregue em
+páginas de até 100 linhas por cursor de keyset; o cursor não pertence ao plano produzido pelo
+modelo.
 
-Período, métrica e limite são os únicos elementos que o planner pode escolher. O executor
-percorre todas as páginas dos repositories antes de calcular, evitando totais parciais. Um
-sintetizador determinístico formata apenas valores já calculados.
+O modelo escolhe somente símbolos e argumentos desse vocabulário. O
+`SalesAnalyticsRepository` compila o plano para SQLAlchemy e o banco executa filtros, joins,
+agrupamentos, agregações, comparações, ordenação e limite. O sintetizador determinístico apenas
+apresenta as evidências já calculadas. Cursores de continuação entram separadamente pelo
+adapter, sem serem criados ou interpretados pela LLM.
 
-Perguntas que exijam previsão, causalidade, SQL, registros individuais, comparação entre
-períodos, agrupamento por cliente ou vários insights simultâneos retornam um plano vazio e
-uma explicação do catálogo suportado. Elas não são parcialmente respondidas nem encaminhadas
-a um modelo para cálculo livre.
+## Exemplos suportados
 
-## Fluxo
+- total vendido em 2025;
+- semana de 2025 com maior receita;
+- receita por mês;
+- cinco produtos mais vendidos;
+- faturamento por categoria e mês;
+- vendas de um produto ou cliente específico;
+- comparação de receita entre dois períodos;
+- crescimento por produto ou categoria.
 
-```text
-Pergunta
-   |
-   v
-SalesQueryPlanner (não determinístico: classifica intenção e período)
-   |
-   v
-SalesQueryPlan (zero ou uma operação validada)
-   |
-   v
-RepositorySalesQueryExecutor (determinístico: pagina, soma, conta, divide e ordena)
-   |
-   v
-SalesQueryEvidence (valores já calculados)
-   |
-   v
-DeterministicSalesInsightSynthesizer (determinístico: formata)
-   |
-   v
-Resposta
-```
+## Limites sem mudança de schema
+
+Continuam fora do catálogo:
+
+- produtos comprados juntos, pois não existe `order_id`;
+- número real de pedidos com vários itens;
+- estornos, descontos, status e moedas, pois esses atributos não existem;
+- causalidade, como “por que as vendas caíram?”;
+- várias análises independentes na mesma pergunta.
 
 ## Invariantes
 
-- O modelo nunca recebe valores monetários ou linhas para agregar.
-- O plano nunca contém mais de uma operação.
-- Operações desconhecidas e planos compostos são rejeitados pelo parser tipado.
-- Nenhuma página limitada de repository é tratada como conjunto completo.
-- Valores monetários são calculados com `Decimal`.
-- O texto final não pode alterar, recalcular ou inferir valores.
-- A pergunta de regressão sobre o total de 2025 deve resultar em 33 vendas e `R$ 2.309,78`.
+- A LLM nunca recebe linhas de venda, conexão, ORM ou SQL.
+- Um plano contém no máximo uma operação validada.
+- Métricas monetárias usam `Decimal`.
+- Agregações são executadas no banco sobre o schema existente.
+- Cada página de `sales.compare` usa uma única instrução SQL e uma ordenação determinística.
+- Nenhuma migração ou tabela adicional é exigida por essa capacidade.
 
-## Consequências
+## Decisões relacionadas
 
-O serviço deixa de responder perguntas abertas fora do catálogo. Essa limitação é
-intencional: capacidades novas devem entrar como novas primitivas determinísticas, com
-contrato e testes, antes de serem ensinadas ao planner.
-
-Em troca, respostas suportadas têm semântica verificável, testes sem inferência, menor
-latência e apenas uma chamada ao modelo. Trocar Gemma por outro classificador continua
-possível sem alterar cálculos, persistence ou adaptadores de entrada.
+- [Comparação de vendas com agregação condicional e cursor](./comparacao-de-vendas-com-agregacao-condicional-e-cursor.md)
+- [Implementações substituíveis para as etapas não determinísticas](./abstracao-das-etapas-nao-deterministicas.md)
+- [Abstração da persistência relacional por meio de repositories](./abstracao-da-persistencia-relacional.md)

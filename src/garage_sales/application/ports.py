@@ -11,7 +11,7 @@ from garage_sales.application.models import (
 class GetSalesInsights(Protocol):
     """Inbound port for the get-sales-insights use case."""
 
-    def execute(self, *, question: str) -> SalesInsight: ...
+    def execute(self, *, question: str, cursor: str | None = None) -> SalesInsight: ...
 
 
 class GetTopProducts(Protocol):
@@ -29,20 +29,15 @@ class SalesQueryPlanner(Protocol):
 class SalesQueryExecutor(Protocol):
     """Outbound port that obtains evidence without exposing persistence details."""
 
-    def execute(self, *, plan: SalesQueryPlan) -> SalesQueryEvidence: ...
+    def execute(
+        self,
+        *,
+        plan: SalesQueryPlan,
+        cursor: str | None = None,
+    ) -> SalesQueryEvidence: ...
 
 
 class SalesInsightSynthesizer(Protocol):
     """Outbound port that turns repository evidence into a natural-language answer."""
 
     def synthesize(self, *, question: str, evidence: SalesQueryEvidence) -> str: ...
-
-
-class SalesInsightsAgent(Protocol):
-    """Legacy composite port retained for compatible inbound adapters.
-
-    New implementations should use the independently replaceable planner and
-    synthesizer ports above.
-    """
-
-    def answer(self, *, question: str) -> SalesInsight: ...

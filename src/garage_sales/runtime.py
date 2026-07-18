@@ -19,28 +19,41 @@ from garage_sales.bootstrap import (
 from garage_sales.config import (
     LlmProviderSettings,
     RelationalDatabaseSettings,
+    SalesQueryPlannerSettings,
     load_runtime_env,
 )
-from garage_sales.infrastructure.sqlalchemy.migrations import upgrade_database
 
 
 def create_runtime_app(
     *,
     database_settings: RelationalDatabaseSettings | None = None,
     llm_settings: LlmProviderSettings | None = None,
+    planner_settings: SalesQueryPlannerSettings | None = None,
     model: BaseChatModel | None = None,
 ) -> FastAPI:
     """Compose concrete infrastructure while preserving replaceable ports."""
 
-    if database_settings is None or (llm_settings is None and model is None):
+    if (
+        database_settings is None
+        or planner_settings is None
+        or (llm_settings is None and model is None)
+    ):
         load_runtime_env()
     active_database_settings = database_settings or RelationalDatabaseSettings.from_env()
-    upgrade_database(active_database_settings.url)
+    active_planner_settings = planner_settings or SalesQueryPlannerSettings.from_env()
     persistence = build_relational_persistence(active_database_settings)
     active_model = model or build_chat_model(llm_settings)
     get_sales_insights = build_get_sales_insights(
         relational_persistence=persistence,
-        planner=LangChainSalesQueryPlanner(active_model),
+        planner=LangChainSalesQueryPlanner(
+            active_model,
+            max_date_validation_retries=(
+                active_planner_settings.date_validation_max_retries
+            ),
+            max_filter_validation_retries=(
+                active_planner_settings.filter_validation_max_retries
+            ),
+        ),
         synthesizer=DeterministicSalesInsightSynthesizer(),
     )
     get_top_products = build_get_top_products(relational_persistence=persistence)

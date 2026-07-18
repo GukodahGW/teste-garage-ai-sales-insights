@@ -1,20 +1,15 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
-from datetime import datetime
-from decimal import Decimal
 
 from garage_sales.domain.analytics import (
     AggregateSales,
-    AnalysisDataset,
-    AnalysisStatus,
-    AnomalyAnalysis,
-    BasketAnalysis,
-    CohortAnalysis,
     CompareSales,
-    ForecastSales,
-    SalesMetric,
+    ProductSalesTotal,
+    SalesAnalysisResult,
 )
 
-MAX_REPOSITORY_QUERIES_PER_INSIGHT = 5
+MAX_REPOSITORY_QUERIES_PER_INSIGHT = 1
 
 
 class SalesPlanningError(RuntimeError):
@@ -23,12 +18,11 @@ class SalesPlanningError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class SalesInsight:
-    """Transport-independent, auditable result for a sales question."""
+    """Transport-independent answer to a sales question."""
 
     answer: str
-    status: AnalysisStatus = AnalysisStatus.ANSWERED
-    data: tuple[AnalysisDataset, ...] = ()
-    warnings: tuple[str, ...] = ()
+    next_cursor: str | None = None
+    plan: SalesQueryPlan | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +33,15 @@ class TopProduct:
     sku: str
     name: str
     quantity_sold: int
+
+    @classmethod
+    def from_sales_total(cls, total: ProductSalesTotal) -> TopProduct:
+        return cls(
+            product_id=total.product_id,
+            sku=total.sku,
+            name=total.name,
+            quantity_sold=total.quantity_sold,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,91 +70,19 @@ class TopProductsResult:
             raise ValueError("products exige um reference_month")
 
 
-@dataclass(frozen=True, slots=True)
-class CalculateSalesMetric:
-    """Calculate one fundamental sales metric over a closed time interval."""
-
-    metric: SalesMetric
-    sold_from: datetime | None = None
-    sold_until: datetime | None = None
-
-    def __post_init__(self) -> None:
-        if self.metric not in {
-            SalesMetric.REVENUE,
-            SalesMetric.SALE_COUNT,
-            SalesMetric.UNITS_SOLD,
-            SalesMetric.AVERAGE_TICKET,
-        }:
-            raise ValueError("sales.calculate aceita apenas metricas legadas fundamentais")
-        if self.sold_from and self.sold_until and self.sold_from > self.sold_until:
-            raise ValueError("sold_from nao pode ser posterior a sold_until")
-
-
-@dataclass(frozen=True, slots=True)
-class FindTopProducts:
-    """Rank products deterministically by units sold in a time interval."""
-
-    sold_from: datetime | None = None
-    sold_until: datetime | None = None
-    limit: int = 5
-
-    def __post_init__(self) -> None:
-        if not 1 <= self.limit <= 20:
-            raise ValueError("limit de top products deve estar entre 1 e 20")
-        if self.sold_from and self.sold_until and self.sold_from > self.sold_until:
-            raise ValueError("sold_from nao pode ser posterior a sold_until")
-
-
-@dataclass(frozen=True, slots=True)
-class SalesMetricValue:
-    """Value computed by deterministic application code, never by a model."""
-
-    metric: SalesMetric
-    value: Decimal | int
-    matched_sales: int
-
-    def __post_init__(self) -> None:
-        if self.matched_sales < 0:
-            raise ValueError("matched_sales nao pode ser negativo")
-        monetary_metrics = {SalesMetric.REVENUE, SalesMetric.AVERAGE_TICKET}
-        if self.metric in monetary_metrics and not isinstance(self.value, Decimal):
-            raise TypeError("metricas monetarias devem usar Decimal")
-        if self.metric not in monetary_metrics and (
-            not isinstance(self.value, int) or isinstance(self.value, bool)
-        ):
-            raise TypeError("metricas de contagem devem usar int")
-
-
-RepositoryQuery = (
-    CalculateSalesMetric
-    | FindTopProducts
-    | AggregateSales
-    | CompareSales
-    | BasketAnalysis
-    | CohortAnalysis
-    | ForecastSales
-    | AnomalyAnalysis
-)
-RepositoryRecord = SalesMetricValue | TopProduct | AnalysisDataset
+RepositoryQuery = AggregateSales | CompareSales
+RepositoryRecord = SalesAnalysisResult
 
 
 @dataclass(frozen=True, slots=True)
 class SalesQueryPlan:
-    """Bounded analytical program produced from one natural-language question."""
+    """At most one repository operation selected from a closed catalog."""
 
     queries: tuple[RepositoryQuery, ...]
 
     def __post_init__(self) -> None:
         if len(self.queries) > MAX_REPOSITORY_QUERIES_PER_INSIGHT:
-            raise ValueError(
-                "um plano de sales insight deve conter no maximo "
-                f"{MAX_REPOSITORY_QUERIES_PER_INSIGHT} consultas"
-            )
-        if len(set(self.queries)) != len(self.queries):
-            raise ValueError("um plano nao pode conter consultas duplicadas")
-        legacy = (CalculateSalesMetric, FindTopProducts)
-        if len(self.queries) > 1 and any(isinstance(query, legacy) for query in self.queries):
-            raise ValueError("operacoes legadas nao podem compor um plano")
+            raise ValueError("um plano de sales insight aceita no maximo uma consulta")
 
 
 @dataclass(frozen=True, slots=True)

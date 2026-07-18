@@ -93,7 +93,7 @@ def _create_legacy_schema(database_url: str) -> None:
         engine.dispose()
 
 
-def test_initial_migration_creates_schema_and_seeds_attached_dataset(tmp_path: Path) -> None:
+def test_initial_migration_creates_schema_without_seeding(tmp_path: Path) -> None:
     database_url = _database_url(tmp_path / "migration.db")
 
     upgrade_database(database_url)
@@ -101,9 +101,12 @@ def test_initial_migration_creates_schema_and_seeds_attached_dataset(tmp_path: P
     engine = create_engine(database_url)
     try:
         inspector = inspect(engine)
-        assert {"alembic_version", "customers", "products", "sales"} <= set(
-            inspector.get_table_names()
-        )
+        assert set(inspector.get_table_names()) == {
+            "alembic_version",
+            "customers",
+            "products",
+            "sales",
+        }
         assert {column["name"] for column in inspector.get_columns("products")} >= {
             "id",
             "sku",
@@ -111,6 +114,7 @@ def test_initial_migration_creates_schema_and_seeds_attached_dataset(tmp_path: P
             "category",
             "price",
         }
+        assert "category_id" not in {column["name"] for column in inspector.get_columns("products")}
         assert {column["name"] for column in inspector.get_columns("customers")} >= {
             "id",
             "name",
@@ -127,23 +131,9 @@ def test_initial_migration_creates_schema_and_seeds_attached_dataset(tmp_path: P
         }
 
         with engine.connect() as connection:
-            assert connection.scalar(select(func.count()).select_from(ProductModel)) == 5
-            assert connection.scalar(select(func.count()).select_from(CustomerModel)) == 5
-            assert connection.scalar(select(func.count()).select_from(SaleModel)) == 33
-
-            product = connection.execute(
-                select(ProductModel.sku, ProductModel.category, ProductModel.unit_price).where(
-                    ProductModel.sku == "SKU001"
-                )
-            ).one()
-            assert tuple(product) == ("SKU001", "Category 1", Decimal("10.99"))
-
-            last_sale = connection.execute(
-                select(SaleModel.product_id, SaleModel.customer_id, SaleModel.quantity).where(
-                    SaleModel.sold_at == datetime(2025, 3, 2, 10)
-                )
-            ).one()
-            assert tuple(last_sale) == (5, 2, 9)
+            assert connection.scalar(select(func.count()).select_from(ProductModel)) == 0
+            assert connection.scalar(select(func.count()).select_from(CustomerModel)) == 0
+            assert connection.scalar(select(func.count()).select_from(SaleModel)) == 0
     finally:
         engine.dispose()
 
@@ -157,9 +147,9 @@ def test_migration_is_idempotent_and_can_be_downgraded(tmp_path: Path) -> None:
     engine = create_engine(database_url)
     try:
         with engine.connect() as connection:
-            assert connection.scalar(select(func.count()).select_from(ProductModel)) == 5
-            assert connection.scalar(select(func.count()).select_from(CustomerModel)) == 5
-            assert connection.scalar(select(func.count()).select_from(SaleModel)) == 33
+            assert connection.scalar(select(func.count()).select_from(ProductModel)) == 0
+            assert connection.scalar(select(func.count()).select_from(CustomerModel)) == 0
+            assert connection.scalar(select(func.count()).select_from(SaleModel)) == 0
     finally:
         engine.dispose()
 
@@ -173,6 +163,37 @@ def test_migration_is_idempotent_and_can_be_downgraded(tmp_path: Path) -> None:
         assert "sales" not in tables
     finally:
         downgraded_engine.dispose()
+
+
+def test_cleanup_migration_removes_retired_analytical_tables(tmp_path: Path) -> None:
+    database_url = _database_url(tmp_path / "retired-schema.db")
+    upgrade_database(database_url)
+    downgrade_database(database_url, "20260717_0002")
+
+    engine = create_engine(database_url)
+    try:
+        assert {"categories", "orders", "order_items", "refunds"} <= set(
+            inspect(engine).get_table_names()
+        )
+    finally:
+        engine.dispose()
+
+    upgrade_database(database_url)
+
+    cleaned_engine = create_engine(database_url)
+    try:
+        cleaned_inspector = inspect(cleaned_engine)
+        assert set(cleaned_inspector.get_table_names()) == {
+            "alembic_version",
+            "customers",
+            "products",
+            "sales",
+        }
+        assert "category_id" not in {
+            column["name"] for column in cleaned_inspector.get_columns("products")
+        }
+    finally:
+        cleaned_engine.dispose()
 
 
 def test_initial_migration_upgrades_an_unversioned_legacy_schema_without_data_loss(
@@ -192,9 +213,9 @@ def test_initial_migration_upgrades_an_unversioned_legacy_schema_without_data_lo
         assert "sale_date" in {column["name"] for column in inspector.get_columns("sales")}
 
         with engine.connect() as connection:
-            assert connection.scalar(select(func.count()).select_from(ProductModel)) == 6
-            assert connection.scalar(select(func.count()).select_from(CustomerModel)) == 6
-            assert connection.scalar(select(func.count()).select_from(SaleModel)) == 34
+            assert connection.scalar(select(func.count()).select_from(ProductModel)) == 1
+            assert connection.scalar(select(func.count()).select_from(CustomerModel)) == 1
+            assert connection.scalar(select(func.count()).select_from(SaleModel)) == 1
 
             legacy_product = connection.execute(
                 select(ProductModel.unit_price, ProductModel.category).where(
@@ -228,11 +249,11 @@ def test_migration_script_uses_the_active_database_url(tmp_path: Path) -> None:
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert "Migracoes aplicadas e seed validado: sqlite" in completed.stdout
+    assert "Migracoes aplicadas: sqlite" in completed.stdout
 
     engine = create_engine(database_url)
     try:
         with engine.connect() as connection:
-            assert connection.scalar(select(func.count()).select_from(SaleModel)) == 33
+            assert connection.scalar(select(func.count()).select_from(SaleModel)) == 0
     finally:
         engine.dispose()

@@ -18,7 +18,7 @@ def _alembic_config(database_url: str | URL) -> Config:
 
 
 def upgrade_database(database_url: str | URL, revision: str = "head") -> None:
-    """Apply pending schema and data revisions to the selected relational database."""
+    """Apply pending schema revisions to the selected relational database."""
 
     command.upgrade(_alembic_config(database_url), revision)
 
@@ -36,7 +36,7 @@ def run() -> None:
     settings = RelationalDatabaseSettings.from_env()
     upgrade_database(settings.url)
     dialect = make_url(settings.url).get_backend_name()
-    print(f"Migracoes aplicadas e seed validado: {dialect}")
+    print(f"Migracoes aplicadas: {dialect}")
 
 
 if __name__ == "__main__":

@@ -27,9 +27,16 @@ def main() -> int:
         default=os.getenv("GARAGE_API_URL", DEFAULT_BASE_URL),
         help="URL base da API (padrão: GARAGE_API_URL ou http://127.0.0.1:8000)",
     )
+    parser.add_argument(
+        "--cursor",
+        help="cursor opaco retornado por uma pagina anterior da mesma comparacao",
+    )
     args = parser.parse_args()
 
-    query = urlencode({"question": args.question})
+    parameters = {"question": args.question}
+    if args.cursor is not None:
+        parameters["cursor"] = args.cursor
+    query = urlencode(parameters)
     url = f"{args.base_url.rstrip('/')}/sales-insights?{query}"
     return get_json(url)
 

@@ -9,7 +9,6 @@ from garage_sales.application import SalesQueries
 from garage_sales.bootstrap import build_relational_persistence
 from garage_sales.config import load_runtime_env
 from garage_sales.domain import SaleCriteria
-from garage_sales.infrastructure.sqlalchemy.migrations import upgrade_database
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -17,8 +16,6 @@ def _parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("check-db", help="valida a conexao com o banco configurado")
-    subparsers.add_parser("init-db", help="aplica as migracoes e os seeds pendentes")
-    subparsers.add_parser("migrate-db", help="aplica as migracoes e os seeds pendentes")
 
     sales = subparsers.add_parser("list-sales", help="lista vendas usando os repositorios")
     sales.add_argument("--customer-id", type=int)
@@ -39,13 +36,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             with relational_persistence.engine.connect() as connection:
                 connection.execute(text("SELECT 1")).scalar_one()
             print(f"Conexao OK: {relational_persistence.engine.dialect.name}")
-            return 0
-
-        if args.command in {"init-db", "migrate-db"}:
-            upgrade_database(relational_persistence.engine.url)
-            print(
-                f"Migracoes aplicadas e seed validado: {relational_persistence.engine.dialect.name}"
-            )
             return 0
 
         criteria = SaleCriteria(

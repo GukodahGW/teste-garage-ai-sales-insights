@@ -7,9 +7,12 @@ from garage_sales.config import (
     DEFAULT_LLM_BASE_URL,
     DEFAULT_LLM_MODEL,
     DEFAULT_LLM_PROVIDER,
+    DEFAULT_PLANNER_DATE_VALIDATION_MAX_RETRIES,
+    DEFAULT_PLANNER_FILTER_VALIDATION_MAX_RETRIES,
     DEFAULT_RELATIONAL_DATABASE_URL,
     LlmProviderSettings,
     RelationalDatabaseSettings,
+    SalesQueryPlannerSettings,
     load_runtime_env,
 )
 
@@ -86,6 +89,40 @@ def test_relational_database_settings_read_active_adapter_url(
         url=database_url,
         echo=True,
     )
+
+
+def test_sales_query_planner_settings_configure_bounded_date_retries(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GARAGE_PLANNER_DATE_VALIDATION_MAX_RETRIES", raising=False)
+    monkeypatch.delenv("GARAGE_PLANNER_FILTER_VALIDATION_MAX_RETRIES", raising=False)
+
+    assert SalesQueryPlannerSettings.from_env() == SalesQueryPlannerSettings(
+        date_validation_max_retries=DEFAULT_PLANNER_DATE_VALIDATION_MAX_RETRIES,
+        filter_validation_max_retries=DEFAULT_PLANNER_FILTER_VALIDATION_MAX_RETRIES,
+    )
+
+    monkeypatch.setenv("GARAGE_PLANNER_DATE_VALIDATION_MAX_RETRIES", "4")
+    monkeypatch.setenv("GARAGE_PLANNER_FILTER_VALIDATION_MAX_RETRIES", "3")
+    assert SalesQueryPlannerSettings.from_env().date_validation_max_retries == 4
+    assert SalesQueryPlannerSettings.from_env().filter_validation_max_retries == 3
+
+    monkeypatch.setenv("GARAGE_PLANNER_DATE_VALIDATION_MAX_RETRIES", "6")
+    try:
+        SalesQueryPlannerSettings.from_env()
+    except ValueError as error:
+        assert "entre 0 e 5" in str(error)
+    else:
+        raise AssertionError("retry de data acima do limite deveria ser rejeitado")
+
+    monkeypatch.setenv("GARAGE_PLANNER_DATE_VALIDATION_MAX_RETRIES", "2")
+    monkeypatch.setenv("GARAGE_PLANNER_FILTER_VALIDATION_MAX_RETRIES", "6")
+    try:
+        SalesQueryPlannerSettings.from_env()
+    except ValueError as error:
+        assert "filter_validation_max_retries" in str(error)
+    else:
+        raise AssertionError("retry de filtro acima do limite deveria ser rejeitado")
 
 
 def test_llm_provider_settings_use_safe_local_defaults(monkeypatch: MonkeyPatch) -> None:

@@ -1,13 +1,10 @@
 from typing import Annotated, TypeVar
 
-import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, Query, status
+from fastapi.encoders import jsonable_encoder
 from starlette.types import Lifespan
 
 from garage_sales.adapters.http.schemas import (
-    AnalysisCellResponse,
-    AnalysisDatasetResponse,
-    AnalysisRowResponse,
     ErrorResponse,
     SalesInsightResponse,
     SalesInsightsQuery,
@@ -16,9 +13,9 @@ from garage_sales.adapters.http.schemas import (
     TopProductsResponse,
 )
 from garage_sales.application import GetSalesInsights, GetTopProducts, SalesPlanningError
+from garage_sales.domain import SalesAnalysisCursorError
 
 T = TypeVar("T")
-
 
 def _require_use_case(use_case: T | None, name: str) -> T:
     if use_case is None:
@@ -27,7 +24,6 @@ def _require_use_case(use_case: T | None, name: str) -> T:
             detail=f"O caso de uso {name} ainda nao foi configurado.",
         )
     return use_case
-
 
 def _create_router(
     get_sales_insights: GetSalesInsights | None,
@@ -42,7 +38,7 @@ def _create_router(
         responses={
             status.HTTP_422_UNPROCESSABLE_CONTENT: {
                 "model": ErrorResponse,
-                "description": "A pergunta nao produziu um plano analitico seguro.",
+                "description": "A pergunta ou o cursor nao produziu uma consulta segura.",
             },
             status.HTTP_503_SERVICE_UNAVAILABLE: {
                 "model": ErrorResponse,
@@ -59,40 +55,20 @@ def _create_router(
 
         use_case = _require_use_case(get_sales_insights, "GetSalesInsights")
         try:
-            result = use_case.execute(question=query.question)
-        except SalesPlanningError as error:
+            result = use_case.execute(question=query.question, cursor=query.cursor)
+        except (SalesAnalysisCursorError, SalesPlanningError) as error:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(error),
             ) from error
         return SalesInsightResponse(
             answer=result.answer,
-            status=result.status,
-            data=[
-                AnalysisDatasetResponse(
-                    status=dataset.status,
-                    rows=[
-                        AnalysisRowResponse(
-                            dimensions=[
-                                AnalysisCellResponse(name=cell.name, value=cell.value)
-                                for cell in row.dimensions
-                            ],
-                            metrics=[
-                                AnalysisCellResponse(name=cell.name, value=cell.value)
-                                for cell in row.metrics
-                            ],
-                        )
-                        for row in dataset.rows
-                    ],
-                    warnings=list(dataset.warnings),
-                    metadata=[
-                        AnalysisCellResponse(name=cell.name, value=cell.value)
-                        for cell in dataset.metadata
-                    ],
-                )
-                for dataset in result.data
-            ],
-            warnings=list(result.warnings),
+            next_cursor=result.next_cursor,
+            plan=(
+                jsonable_encoder(result.plan)
+                if query.include_plan and result.plan is not None
+                else None
+            ),
         )
 
     @router.get(
@@ -152,12 +128,3 @@ def create_app(
     )
     application.include_router(_create_router(get_sales_insights, get_top_products))
     return application
-
-
-app = create_app()
-
-
-def run() -> None:
-    """Run the unconfigured HTTP adapter for local integration checks."""
-
-    uvicorn.run("garage_sales.adapters.http.api:app", host="127.0.0.1", port=8000)

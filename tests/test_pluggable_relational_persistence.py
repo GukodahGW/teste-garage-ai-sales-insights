@@ -1,17 +1,24 @@
+from datetime import datetime
 from types import TracebackType
 from typing import Self
 
 from garage_sales.application import SalesQueries
 from garage_sales.domain import (
+    AggregateSales,
+    CompareSales,
     Customer,
     CustomerCriteria,
     CustomerReadRepository,
     Product,
     ProductCriteria,
     ProductReadRepository,
+    ProductSalesTotal,
+    RelationalReadUnitOfWork,
     Sale,
     SaleCriteria,
     SaleReadRepository,
+    SalesAnalysisResult,
+    SalesAnalyticsRepository,
 )
 
 
@@ -45,15 +52,41 @@ class EmptyProductRepository:
         return []
 
 
+class UnexpectedAnalyticsRepository:
+    def aggregate(self, query: AggregateSales) -> SalesAnalysisResult:
+        del query
+        raise AssertionError("analytics nao deveria ser chamado")
+
+    def compare(
+        self,
+        query: CompareSales,
+        *,
+        cursor: str | None = None,
+    ) -> SalesAnalysisResult:
+        del query, cursor
+        raise AssertionError("analytics nao deveria ser chamado")
+
+    def top_products(
+        self,
+        *,
+        sold_from: datetime | None = None,
+        sold_until: datetime | None = None,
+        limit: int = 5,
+    ) -> tuple[ProductSalesTotal, ...]:
+        raise AssertionError("analytics nao deveria ser chamado")
+
+
 class FakeRelationalReadUnitOfWork:
     sales: SaleReadRepository
     customers: CustomerReadRepository
     products: ProductReadRepository
+    analytics: SalesAnalyticsRepository
 
     def __init__(self, sales: list[Sale]) -> None:
         self.sales = FakeSaleRepository(sales)
         self.customers = EmptyCustomerRepository()
         self.products = EmptyProductRepository()
+        self.analytics = UnexpectedAnalyticsRepository()
 
     def __enter__(self) -> Self:
         return self
@@ -71,7 +104,7 @@ class FakeRelationalPersistence:
     def __init__(self, sales: list[Sale]) -> None:
         self._sales = sales
 
-    def read(self) -> FakeRelationalReadUnitOfWork:
+    def read(self) -> RelationalReadUnitOfWork:
         return FakeRelationalReadUnitOfWork(self._sales)
 
 

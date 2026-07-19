@@ -64,5 +64,6 @@ catálogo nem executa parcialmente um plano.
 
 ## Decisões relacionadas
 
+- [Uso restrito do LangChain no planejamento de insights](./uso-restrito-do-langchain-no-planejamento-de-insights.md)
 - [Álgebra limitada para insights de vendas em linguagem natural](./consultando-db-com-linguagem-natural.md)
 - [Comparação de vendas com agregação condicional e cursor](./comparacao-de-vendas-com-agregacao-condicional-e-cursor.md)

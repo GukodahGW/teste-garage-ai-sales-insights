@@ -1,4 +1,7 @@
 from garage_sales.adapters.langchain.chat_models import (
+    GemmaJobApiError,
+    GemmaJobChatModel,
+    GemmaJobTimeoutError,
     UnsupportedLlmProviderError,
     build_chat_model,
 )
@@ -15,6 +18,9 @@ from garage_sales.adapters.langchain.sales_insights import (
 __all__ = [
     "LangChainPlanningError",
     "LangChainSalesQueryPlanner",
+    "GemmaJobApiError",
+    "GemmaJobChatModel",
+    "GemmaJobTimeoutError",
     "PlannerFilterValidationError",
     "QuestionFilterConstraint",
     "UnsupportedLlmProviderError",

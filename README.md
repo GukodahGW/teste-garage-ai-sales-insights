@@ -21,6 +21,31 @@ As dependências são declaradas em `pyproject.toml` e resolvidas em `uv.lock`. 
 usa `uv sync --locked`; se as dependências forem alteradas, atualize o lock
 deliberadamente com `uv lock`.
 
+## Provider Gemma
+
+O projeto consome a API pública de jobs duráveis em
+`https://gemma.lontra-agil.online/v1`. Cada chamada cria um job com
+`POST /jobs` e uma chave de idempotência nova, depois aguarda o resultado com
+`GET /jobs/{id}/wait`. A aplicação não usa mais `POST /chat/completions`
+diretamente.
+
+Configure no `.env` o ID exato do modelo exposto pelo provider e uma credencial
+Bearer válida:
+
+```dotenv
+GARAGE_LLM_PROVIDER=gemma
+GARAGE_LLM_BASE_URL=https://gemma.lontra-agil.online/v1
+GARAGE_LLM_MODEL=gemma-4-E4B-it-Q4_K_M.gguf
+GARAGE_LLM_API_KEY_FILE=C:\caminho\cloudflare-api-key.txt
+GARAGE_LLM_TIMEOUT_SECONDS=900
+GARAGE_LLM_MAX_RETRIES=2
+```
+
+`GARAGE_LLM_TIMEOUT_SECONDS` cobre submissão, espera na fila e inferência. Se
+esse prazo terminar, o adapter tenta cancelar o job que ainda estiver ativo.
+`GARAGE_LLM_MAX_RETRIES` cobre falhas transitórias de HTTP e transporte; as
+tentativas internas de inferência continuam sob responsabilidade do provider.
+
 ## Windows — PowerShell
 
 ### 1. Preparar o ambiente

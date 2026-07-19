@@ -109,7 +109,8 @@ Esse orçamento é independente de:
 
 - `GARAGE_PLANNER_DATE_VALIDATION_MAX_RETRIES`, usado para datas impossíveis;
 - reparos genéricos de parsing e semântica;
-- `GARAGE_LLM_MAX_RETRIES`, usado somente para transporte até o provider.
+- `GARAGE_LLM_MAX_RETRIES`, usado somente para falhas transitórias de HTTP e transporte
+  da API de jobs do provider.
 
 Com o padrão, uma sequência motivada apenas por filtro possui no máximo uma composição inicial
 e duas recomposições. Ao esgotar o limite, o endpoint retorna 422 em vez de responder 200 com

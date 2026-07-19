@@ -3,10 +3,10 @@ from pathlib import Path
 from _pytest.monkeypatch import MonkeyPatch
 
 from garage_sales.config import (
-    DEFAULT_LLM_API_KEY,
     DEFAULT_LLM_BASE_URL,
     DEFAULT_LLM_MODEL,
     DEFAULT_LLM_PROVIDER,
+    DEFAULT_LLM_TIMEOUT_SECONDS,
     DEFAULT_PLANNER_DATE_VALIDATION_MAX_RETRIES,
     DEFAULT_PLANNER_FILTER_VALIDATION_MAX_RETRIES,
     DEFAULT_RELATIONAL_DATABASE_URL,
@@ -125,7 +125,7 @@ def test_sales_query_planner_settings_configure_bounded_date_retries(
         raise AssertionError("retry de filtro acima do limite deveria ser rejeitado")
 
 
-def test_llm_provider_settings_use_safe_local_defaults(monkeypatch: MonkeyPatch) -> None:
+def test_llm_provider_settings_use_job_api_defaults(monkeypatch: MonkeyPatch) -> None:
     for name in (
         "GARAGE_LLM_PROVIDER",
         "GARAGE_LLM_BASE_URL",
@@ -140,15 +140,29 @@ def test_llm_provider_settings_use_safe_local_defaults(monkeypatch: MonkeyPatch)
     ):
         monkeypatch.delenv(name, raising=False)
 
+    monkeypatch.setenv("GARAGE_LLM_API_KEY", "configured-secret")
     settings = LlmProviderSettings.from_env()
 
     assert settings == LlmProviderSettings(
         provider=DEFAULT_LLM_PROVIDER,
         base_url=DEFAULT_LLM_BASE_URL,
         model=DEFAULT_LLM_MODEL,
-        api_key=DEFAULT_LLM_API_KEY,
+        api_key="configured-secret",
+        timeout_seconds=DEFAULT_LLM_TIMEOUT_SECONDS,
     )
-    assert DEFAULT_LLM_API_KEY not in repr(settings)
+    assert "configured-secret" not in repr(settings)
+
+
+def test_llm_provider_settings_require_a_public_api_key(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.delenv("GARAGE_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("GARAGE_LLM_API_KEY_FILE", raising=False)
+
+    try:
+        LlmProviderSettings.from_env()
+    except ValueError as error:
+        assert "LLM_API_KEY" in str(error)
+    else:
+        raise AssertionError("a API publica da Gemma deveria exigir credencial")
 
 
 def test_llm_provider_settings_read_cloudflare_key_file(

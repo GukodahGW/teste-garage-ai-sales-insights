@@ -6,9 +6,9 @@ from pathlib import Path
 
 DEFAULT_RELATIONAL_DATABASE_URL = "sqlite+pysqlite:///./garage.db"
 DEFAULT_LLM_PROVIDER = "gemma"
-DEFAULT_LLM_BASE_URL = "http://127.0.0.1:8080/v1"
-DEFAULT_LLM_MODEL = "gemma-4-e4b-it"
-DEFAULT_LLM_API_KEY = "sk-no-key-required"
+DEFAULT_LLM_BASE_URL = "https://gemma.lontra-agil.online/v1"
+DEFAULT_LLM_MODEL = "gemma-4-E4B-it-Q4_K_M.gguf"
+DEFAULT_LLM_TIMEOUT_SECONDS = 900.0
 DEFAULT_PLANNER_DATE_VALIDATION_MAX_RETRIES = 2
 DEFAULT_PLANNER_FILTER_VALIDATION_MAX_RETRIES = 2
 _ENVIRONMENT_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -120,8 +120,8 @@ class LlmProviderSettings:
     provider: str = DEFAULT_LLM_PROVIDER
     base_url: str = DEFAULT_LLM_BASE_URL
     model: str = DEFAULT_LLM_MODEL
-    api_key: str = field(default=DEFAULT_LLM_API_KEY, repr=False)
-    timeout_seconds: float = 180.0
+    api_key: str | None = field(default=None, repr=False)
+    timeout_seconds: float = DEFAULT_LLM_TIMEOUT_SECONDS
     max_retries: int = 2
     max_tokens: int = 512
     temperature: float = 0.0
@@ -131,14 +131,14 @@ class LlmProviderSettings:
         provider = self.provider.strip().lower()
         base_url = self.base_url.strip().rstrip("/")
         model = self.model.strip()
-        api_key = self.api_key.strip()
+        api_key = None if self.api_key is None else self.api_key.strip()
         if not provider:
             raise ValueError("LLM provider nao pode ser vazio")
         if not base_url.startswith(("http://", "https://")):
             raise ValueError("LLM base_url deve usar http ou https")
         if not model:
             raise ValueError("LLM model nao pode ser vazio")
-        if not api_key:
+        if self.api_key is not None and not api_key:
             raise ValueError("LLM api_key nao pode ser vazia")
         if self.timeout_seconds <= 0:
             raise ValueError("LLM timeout_seconds deve ser positivo")
@@ -164,15 +164,17 @@ class LlmProviderSettings:
                 api_key = Path(api_key_file).expanduser().read_text(encoding="utf-8").strip()
             except OSError as error:
                 raise ValueError(f"nao foi possivel ler LLM_API_KEY_FILE: {error}") from error
+        if api_key is None:
+            raise ValueError("configure LLM_API_KEY ou LLM_API_KEY_FILE para o provider Gemma")
 
         return cls(
             provider=os.getenv(f"{prefix}LLM_PROVIDER", DEFAULT_LLM_PROVIDER),
             base_url=os.getenv(f"{prefix}LLM_BASE_URL", DEFAULT_LLM_BASE_URL),
             model=os.getenv(f"{prefix}LLM_MODEL", DEFAULT_LLM_MODEL),
-            api_key=api_key or DEFAULT_LLM_API_KEY,
+            api_key=api_key,
             timeout_seconds=_float_from_env(
                 f"{prefix}LLM_TIMEOUT_SECONDS",
-                default=180.0,
+                default=DEFAULT_LLM_TIMEOUT_SECONDS,
             ),
             max_retries=_int_from_env(f"{prefix}LLM_MAX_RETRIES", default=2),
             max_tokens=_int_from_env(f"{prefix}LLM_MAX_TOKENS", default=512),

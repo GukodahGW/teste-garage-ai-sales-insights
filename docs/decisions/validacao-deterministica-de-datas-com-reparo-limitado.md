@@ -77,8 +77,8 @@ fazer depois da primeira data inválida:
 - máximo: `5`, para manter latência e custo limitados.
 
 Assim, o valor padrão permite no máximo três composições motivadas por data: a inicial e duas
-recomposições. `GARAGE_LLM_MAX_RETRIES` continua controlando apenas falhas de transporte do
-cliente OpenAI-compatible e não substitui esse orçamento.
+recomposições. `GARAGE_LLM_MAX_RETRIES` continua controlando apenas falhas transitórias de
+HTTP e transporte do cliente da API de jobs e não substitui esse orçamento.
 
 Falhas de datas não consomem o orçamento de reparos genéricos. Ainda assim, uma execução é
 limitada pela soma dos dois orçamentos e nunca entra em loop indefinido. Ao esgotar o limite, o
